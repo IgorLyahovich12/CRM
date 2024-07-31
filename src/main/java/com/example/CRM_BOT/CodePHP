@@ -1,0 +1,81 @@
+<?php
+session_start();
+include_once("config.php");
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $name = $_POST['name'] ?? '';
+    $phone = $_POST['phone'] ?? '';
+
+    if (empty($name) || empty($phone)) {
+        die("Необхідні дані не були передані.");
+    }
+
+    $chat_id = '-4200152982';
+    $messages = [
+        "/new_order",
+        "Имя пользователя: {$name}",
+        "Номер телефону: {$phone}",
+        "Назва товару: {$pixel_folder_name}"
+    ];
+
+    foreach ($products_list as $product) {
+        $messages[] = "Продукт ID: {$product['product_id']}";
+        $messages[] = "Ціна: {$product['price']}";
+        $messages[] = "Кількість: {$product['count']}";
+    }
+
+    $messages[] = "Номер офісу: {$data_recieve['office']}";
+
+    $utm_keys = ['utm_source', 'utm_medium', 'utm_term', 'utm_content', 'utm_campaign'];
+    foreach ($utm_keys as $utm_key) {
+        $utm_value = $_SESSION['utms'][$utm_key] ?? 'N/A';
+        $messages[] = ucfirst(str_replace('utm_', 'UTM ', $utm_key)) . ": {$utm_value}";
+    }
+
+    $messages[] = "Дата і час замовлення: " . date('Y-m-d H:i:s');
+
+    $message = implode("\n", $messages);
+
+    // Подключение к базе данных
+    $dsn = 'pgsql:host=localhost;port=5432;dbname=CRM';
+    $username = 'admin';
+    $password = 'admin';
+
+    try {
+        $pdo = new PDO($dsn, $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+
+        // Подготовка SQL-запроса для вставки данных
+        $stmt = $pdo->prepare("
+            INSERT INTO orders (
+                user_name, phone_number, product_name, product_id, price, quantity, office_number, utm_source, utm_medium, utm_term, utm_content, utm_campaign, order_date_time
+            ) VALUES (
+                :user_name, :phone_number, :product_name, :product_id, :price, :quantity, :office_number, :utm_source, :utm_medium, :utm_term, :utm_content, :utm_campaign, :order_date_time
+            )
+        ");
+
+        // Заполнение параметров запроса
+        foreach ($products_list as $product) {
+            $stmt->execute([
+                ':user_name' => $name,
+                ':phone_number' => $phone,
+                ':product_name' => $pixel_folder_name,
+                ':product_id' => $product['product_id'],
+                ':price' => $product['price'],
+                ':quantity' => $product['count'],
+                ':office_number' => $data_recieve['office'],
+                ':utm_source' => $_SESSION['utms']['utm_source'] ?? 'N/A',
+                ':utm_medium' => $_SESSION['utms']['utm_medium'] ?? 'N/A',
+                ':utm_term' => $_SESSION['utms']['utm_term'] ?? 'N/A',
+                ':utm_content' => $_SESSION['utms']['utm_content'] ?? 'N/A',
+                ':utm_campaign' => $_SESSION['utms']['utm_campaign'] ?? 'N/A',
+                ':order_date_time' => date('Y-m-d H:i:s')
+            ]);
+        }
+
+        echo "Order has been successfully added to the database.";
+
+    } catch (PDOException $e) {
+        echo 'Connection failed: ' . $e->getMessage();
+    }
+}
+?>
